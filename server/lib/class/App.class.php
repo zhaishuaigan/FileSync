@@ -24,9 +24,7 @@ class App {
     // 获取远程文件到本地
     public static function getServerFile($filename) {
         $dir = dirname($GLOBALS['config']['static'] . $filename);
-        if (!is_dir($dir)) {
-            self::mkdirs($dir);
-        }
+        self::nmkdirs($dir);
         $serverList = $GLOBALS['config']['server_list'];
         $url = $serverList[array_rand($serverList)] . 'index.php' . $filename;
         $img = file_get_contents($url);
@@ -48,9 +46,7 @@ class App {
             $filename = date('Y/m/d') . '/' . self::mkguid() . $ext;
         }
         $dir = dirname($GLOBALS['config']['static'] . $filename);
-        if (!is_dir($dir)) {
-            self::mkdirs($dir);
-        }
+        self::nmkdir($dir);
         if (!move_uploaded_file($_FILES[$file]['tmp_name'], $GLOBALS['config']['static'] . $filename)) {
             $info['success'] = 0;
             $info['msg'] = '文件上传保存错误！';
@@ -81,21 +77,70 @@ class App {
     }
 
     // 将本地文件发给客户端
-    public static function echoFile($filename) {
+    public static function echoFile($filename, $w, $h) {
+
         $baseDir = $GLOBALS['config']['static'];
         $localfile = str_replace('//', '/', $baseDir . $filename);
-        if (file_exists($localfile)) {
-            header('Content-Type:image/' . substr(strrchr($filename, '.'), 1));
-            readfile($localfile);
-        } else {
-            $isfile = self::serverFileExists($filename);
-            if ($GLOBALS['config']['mode'] == 'Slave' && $isfile) {
-                self::getServerFile($filename);
-                self::echoFile($filename);
-            } else {
-                header('HTTP/1.1 404 Not Found');
-                header("status: 404 Not Found");
-            }
+        $mode = $GLOBALS['config']['mode'];
+
+        $ext = substr(strrchr($filename, '.'), 1);
+        $islocalfile = file_exists($localfile);
+
+        $thumbDir = $GLOBALS['config']['static_thumb'];
+        $thumbname = $thumbDir . $w . 'x' . $h . '/' . $filename;
+        $isthumbfile = file_exists($thumbname);
+
+        // 没有文件且工作模式是Server就直接返回404
+        if ($mode == 'Server' && !$islocalfile) {
+            self::return404();
+            return;
+        }
+
+        // 如果本地文件存在而且没有限制尺寸, 直接输出原图
+        if ($islocalfile && !$w && !$h) {
+            self::echoImg($localfile, $ext);
+            return;
+        }
+
+        // 如果缩略图存在, 直接输出缩略图
+        if ($isthumbfile) {
+            self::echoImg($thumbname, $ext);
+            return;
+        }
+
+        // 如果本地文件存在 且需要缩略图, 就创建和输出缩略图
+        if ($islocalfile && $w && $h) {
+            self::thumb($localfile, $thumbname, $w, $h);
+            self::echoImg($thumbname, $ext);
+            return;
+        }
+
+        // 如果本地图片不存在 且 是Slave模式 且 主服务器上面有这个文件, 就下载这个文件
+        if ($mode == 'Slave' && self::serverFileExists($filename)) {
+            self::getServerFile($filename);
+            self::echoFile($filename, $w, $h);
+            return;
+        }
+    }
+
+    // 生成缩略图
+    public static function thumb($filename, $thumbname, $w, $h) {
+        self::nmkdir(dirname($thumbname));
+        require_once LIB_DIR . 'class/Image.class.php';
+        $img = new Image();
+        $img->thumb($filename, $thumbname, null, $w, $h);
+    }
+
+    // 输出文件
+    public static function echoImg($filename, $ext) {
+        header('Content-Type:image/' . $ext);
+        readfile($filename);
+    }
+
+    // 检测并创建目录
+    public static function nmkdir($dir) {
+        if (!is_dir($dir)) {
+            self::mkdirs($dir);
         }
     }
 
@@ -132,9 +177,16 @@ class App {
     // 写入错误
     public static function error($filename, $server, $msg, $addtime) {
         require_once LIB_DIR . 'class/DB.class.php';
+        DB::vacuum();
         $sql = 'insert into errs(path,server,msg,time) values( :path, :server, :msg, :time)';
         $data = array($filename, $server, $msg, $addtime);
         DB::prepare($sql, $data);
+    }
+
+    // 返回404
+    public static function return404() {
+        header('HTTP/1.1 404 Not Found');
+        header("status: 404 Not Found");
     }
 
 }
