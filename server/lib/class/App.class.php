@@ -13,7 +13,7 @@ class App {
         $serverList = $GLOBALS['config']['server_list'];
         $server = $serverList[array_rand($serverList)];
         $url = $server . 'index.php' . $filename . '?check=true';
-        $result = @json_decode(file_get_contents($url));
+        $result = json_decode(file_get_contents($url));
         if ($result && $result->isfile) {
             return true;
         } else {
@@ -24,7 +24,7 @@ class App {
     // 获取远程文件到本地
     public static function getServerFile($filename) {
         $dir = dirname($GLOBALS['config']['static'] . $filename);
-        self::nmkdirs($dir);
+        self::nmkdir($dir);
         $serverList = $GLOBALS['config']['server_list'];
         $url = $serverList[array_rand($serverList)] . 'index.php' . $filename;
         $img = file_get_contents($url);
