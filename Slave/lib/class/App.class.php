@@ -12,7 +12,11 @@ class App {
 
     public static function echoFile($filename, $size) {
         $config = $GLOBALS['config'];
-        $filename = $config['static_thumb'] . $size . '/' . $filename;
+        if ($size == $config['src_size']) {
+            $filename = $config['static'] . '/' . $filename;
+        } else {
+            $filename = $config['static_thumb'] . $size . '/' . $filename;
+        }
         $ext = substr(strrchr($filename, '.'), 1);
         header('Content-Type:image/' . $ext);
         readfile($filename);
@@ -29,6 +33,9 @@ class App {
             self::getServerFile($filename);
         }
         if (file_exists($srcFileName)) {
+            if ($size == $config['src_size']) {
+                return true;
+            }
             if (!$wh && !$config['autosize']) {
                 return false;
             }
@@ -43,7 +50,7 @@ class App {
     public static function serverFileExists($filename) {
         $serverList = $GLOBALS['config']['server_list'];
         $server = $serverList[array_rand($serverList)];
-        $url = $server . 'index.php/' . $filename . '?check=true';
+        $url = $server . '/' . $filename . '?check=true';
         $result = json_decode(file_get_contents($url));
         if ($result && $result->isfile) {
             return true;
@@ -57,7 +64,7 @@ class App {
         $dir = dirname($GLOBALS['config']['static'] . $filename);
         self::cmkdir($dir);
         $serverList = $GLOBALS['config']['server_list'];
-        $url = $serverList[array_rand($serverList)] . 'index.php/' . $filename;
+        $url = $serverList[array_rand($serverList)] . '/' . $filename;
         $img = @file_get_contents($url);
         if ($img) {
             $srcFileName = $GLOBALS['config']['static'] . $filename;

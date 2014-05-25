@@ -7,9 +7,10 @@ $GLOBALS['config'] = array(
     'static_thumb' => './static_thumb/',
     // 主服务器列表
     'server_list' => array(
-        'server_1' => 'http://filesync.shuai.com/server/',
+        'server_1' => 'http://filesync.shuai.com/server/index.php',
     ),
     // 允许的图片尺寸和别名
+    'src_size' => 'src',
     'size' => array(
         's' => '320x240', // 小号
         'm' => '640x480', // 中号
