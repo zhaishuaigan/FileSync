@@ -1,37 +1,50 @@
 <?php
 
-$GLOBALS['config'] = require LIB_DIR . 'config/config.php';
-
 class App {
 
-    // 检测文件是否存在
-    public static function exists($filename) {
-        return file_exists($GLOBALS['config']['static'] . $filename);
-    }
-
-    public static function serverFileExists($filename) {
-        $serverList = $GLOBALS['config']['server_list'];
-        $server = $serverList[array_rand($serverList)];
-        $url = $server . 'index.php' . $filename . '?check=true';
-        $result = json_decode(file_get_contents($url));
-        if ($result && $result->isfile) {
-            return true;
+    public static function readFile($filename, $size) {
+        if (self::exists($filename, $size)) {
+            self::echoFile($filename, $size);
         } else {
-            return false;
+            self::return404();
         }
     }
 
-    // 获取远程文件到本地
-    public static function getServerFile($filename) {
-        $dir = dirname($GLOBALS['config']['static'] . $filename);
-        self::nmkdir($dir);
-        $serverList = $GLOBALS['config']['server_list'];
-        $url = $serverList[array_rand($serverList)] . 'index.php' . $filename;
-        $img = file_get_contents($url);
-        if ($img) {
-            file_put_contents($GLOBALS['config']['static'] . $filename, $img, LOCK_EX);
+    public static function echoFile($filename, $size) {
+        $config = $GLOBALS['config'];
+        if ($size == $config['src_size']) {
+            $filename = $config['static'] . '/' . $filename;
+        } else {
+            $filename = $config['static_thumb'] . $size . '/' . $filename;
         }
-        return $img;
+        $ext = substr(strrchr($filename, '.'), 1);
+        header('Content-Type:image/' . $ext);
+        readfile($filename);
+    }
+
+    // 检测文件是否存在
+    public static function exists($filename, $size) {
+        $config = $GLOBALS['config'];
+        $wh = isset($config['size'][$size]) ? $config['size'][$size] : false;
+        $srcFileName = $config['static'] . $filename;
+        $thumbFileName = $config['static_thumb'] . $size . '/' . $filename;
+
+        if (file_exists($srcFileName)) {
+            if ($size == $config['src_size']) {
+                return true;
+            }
+            if (!$wh && !$config['autosize']) {
+                return false;
+            }
+            if ($config['autosize'] && !preg_match('/^(\d+)x(\d+)$/', $size) && !$wh) {
+                return false;
+            }
+            if (!file_exists($thumbFileName)) {
+                App::thumb($filename, $size);
+            }
+            return true;
+        }
+        return false;
     }
 
     // 上传文件
@@ -45,9 +58,10 @@ class App {
         if (!$filename) {
             $filename = date('Y/m/d') . '/' . self::mkguid() . $ext;
         }
-        $dir = dirname($GLOBALS['config']['static'] . $filename);
-        self::nmkdir($dir);
-        if (!move_uploaded_file($_FILES[$file]['tmp_name'], $GLOBALS['config']['static'] . $filename)) {
+        $savefile = $GLOBALS['config']['static'] . $filename;
+        $dir = dirname($savefile);
+        self::cmkdir($dir);
+        if (!move_uploaded_file($_FILES[$file]['tmp_name'], $savefile)) {
             $info['success'] = 0;
             $info['msg'] = '文件上传保存错误！';
         } else {
@@ -60,106 +74,60 @@ class App {
 
     // 同步文件方法
     public static function fileSync($server, $filename) {
-        $ch = curl_init();
         $post_data = array(
             'file' => '@' . $GLOBALS['config']['static'] . $filename
         );
+        $ch = curl_init();
         curl_setopt($ch, CURLOPT_HEADER, false);
         //启用时会发送一个常规的POST请求，类型为：application/x-www-form-urlencoded，就像表单提交的一样。
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
-        curl_setopt($ch, CURLOPT_URL, $server . 'sync.php' . $filename);
+        curl_setopt($ch, CURLOPT_URL, $server . '/' . $filename);
         $info = curl_exec($ch);
         curl_close($ch);
+        if (!$info) {
+            $info = json_encode(array(
+                'success' => 0,
+                'filename' => '',
+                'msg' => '连接出错!'
+            ));
+        }
         return json_decode($info);
     }
 
-    // 将本地文件发给客户端
-    public static function echoFile($filename, $w, $h) {
-
-        $baseDir = $GLOBALS['config']['static'];
-        $localfile = str_replace('//', '/', $baseDir . $filename);
-        $mode = $GLOBALS['config']['mode'];
-
-        $ext = substr(strrchr($filename, '.'), 1);
-        $islocalfile = file_exists($localfile);
-
-        $thumbDir = $GLOBALS['config']['static_thumb'];
-        $thumbname = $thumbDir . $w . 'x' . $h . '/' . $filename;
-        $isthumbfile = file_exists($thumbname);
-
-        // 没有文件且工作模式是Server就直接返回404
-        if ($mode == 'Server' && !$islocalfile) {
-            self::return404();
-            return;
-        }
-
-        // 如果本地文件存在而且没有限制尺寸, 直接输出原图
-        if ($islocalfile && !$w && !$h) {
-            self::echoImg($localfile, $ext);
-            return;
-        }
-
-        // 如果缩略图存在, 直接输出缩略图
-        if ($isthumbfile) {
-            self::echoImg($thumbname, $ext);
-            return;
-        }
-
-        // 如果本地文件存在 且需要缩略图, 就创建和输出缩略图
-        if ($islocalfile && $w && $h) {
-            self::thumb($localfile, $thumbname, $w, $h);
-            self::echoImg($thumbname, $ext);
-            return;
-        }
-
-        // 如果本地图片不存在 且 是Slave模式 且 主服务器上面有这个文件, 就下载这个文件
-        if ($mode == 'Slave' && self::serverFileExists($filename)) {
-            self::getServerFile($filename);
-            self::echoFile($filename, $w, $h);
-            return;
-        }
-    }
-
-    // 生成缩略图
-    public static function thumb($filename, $thumbname, $w, $h) {
-        self::nmkdir(dirname($thumbname));
-        require_once LIB_DIR . 'class/Image.class.php';
-        $img = new Image();
-        $img->thumb($filename, $thumbname, null, $w, $h);
-    }
-
-    // 输出文件
-    public static function echoImg($filename, $ext) {
-        header('Content-Type:image/' . $ext);
-        readfile($filename);
-    }
-
     // 检测并创建目录
-    public static function nmkdir($dir) {
-        if (!is_dir($dir)) {
-            self::mkdirs($dir);
+    public static function cmkdir($path) {
+        if (is_dir($path)) {
+            return;
         }
-    }
-
-    // 循环创建目录
-    public static function mkdirs($path) {
         $adir = explode('/', $path);
         $dirlist = '';
         $rootdir = array_shift($adir);
         if (($rootdir != '.' || $rootdir != '') && !file_exists($rootdir)) {
             @mkdir($rootdir);
         }
-        foreach ($adir as $key => $val) {
-            $dirlist .= "/" . $val;
+        foreach ($adir as $val) {
+            $dirlist .= '/' . $val;
             $dirpath = $rootdir . $dirlist;
             if (!file_exists($dirpath)) {
                 @mkdir($dirpath);
-                @chmod($dirpath, 0777);
             }
         }
+    }
+
+    // 生成缩略图
+    public static function thumb($filename, $size) {
+        $config = $GLOBALS['config'];
+        $wh = isset($config['size'][$size]) ? $config['size'][$size] : false;
+        list($w, $h) = ($wh ? explode('x', $wh) : explode('x', $size));
+        $srcname = $config['static'] . $filename;
+        $thumbname = $config['static_thumb'] . $size . '/' . $filename;
+        self::cmkdir(dirname($thumbname));
+        require_once LIB_DIR . 'class/Image.class.php';
+        $img = new Image();
+        $img->thumb($srcname, $thumbname, null, (int) $w, (int) $h);
     }
 
     //生成唯一标识
@@ -174,6 +142,13 @@ class App {
         return $uuid;
     }
 
+    // 返回404
+    public static function return404() {
+        header('HTTP/1.1 404 Not Found');
+        header("status: 404 Not Found");
+        die();
+    }
+
     // 写入错误
     public static function error($filename, $server, $msg, $addtime) {
         require_once LIB_DIR . 'class/DB.class.php';
@@ -181,13 +156,6 @@ class App {
         $sql = 'insert into errs(path,server,msg,time) values( :path, :server, :msg, :time)';
         $data = array($filename, $server, $msg, $addtime);
         DB::prepare($sql, $data);
-    }
-
-    // 返回404
-    public static function return404() {
-        header('HTTP/1.1 404 Not Found');
-        header("status: 404 Not Found");
-        exit();
     }
 
 }

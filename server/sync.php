@@ -1,8 +1,9 @@
 <?php
 
 define('LIB_DIR', './lib/');
+require LIB_DIR . 'config/config.php';
 require LIB_DIR . 'class/App.class.php';
-$filename = isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : null;
+$filename = filter_input(INPUT_SERVER, 'PATH_INFO');
 $result = array(
     'success' => 0,
     'filename' => '',
@@ -21,7 +22,7 @@ if ($filename) {
         $result = array(
             'success' => 0,
             'filename' => '',
-            'msg' => '同步失败'
+            'msg' => '同步失败!'
         );
     }
 }

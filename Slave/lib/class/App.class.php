@@ -39,6 +39,9 @@ class App {
             if (!$wh && !$config['autosize']) {
                 return false;
             }
+            if ($config['autosize'] && !preg_match('/^(\d+)x(\d+)$/', $size) && !$wh) {
+                return false;
+            }
             if (!file_exists($thumbFileName)) {
                 App::thumb($filename, $size);
             }

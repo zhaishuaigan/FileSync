@@ -7,7 +7,7 @@ $GLOBALS['config'] = array(
     'static_thumb' => './static_thumb/',
     // 主服务器列表
     'server_list' => array(
-        'server_1' => 'http://filesync.shuai.com/server/index.php',
+        'server_1' => 'http://filesync.shuai.com/server/get.php',
     ),
     // 允许的图片尺寸和别名
     'src_size' => 'src',
@@ -19,5 +19,5 @@ $GLOBALS['config'] = array(
     ),
     // 是否开启自动识别图片尺寸和生成图片功能,
     //  注: 开启此项比较危险, 可能会被恶意生成很多无用图片
-    'autosize' => false
+    'autosize' => true
 );
