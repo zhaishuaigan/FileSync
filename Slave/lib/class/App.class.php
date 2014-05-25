@@ -54,7 +54,7 @@ class App {
         $serverList = $GLOBALS['config']['server_list'];
         $server = $serverList[array_rand($serverList)];
         $url = $server . '/' . $filename . '?check=true';
-        $result = json_decode(file_get_contents($url));
+        $result = json_decode(@file_get_contents($url));
         if ($result && $result->isfile) {
             return true;
         } else {
