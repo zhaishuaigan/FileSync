@@ -7,7 +7,7 @@ $GLOBALS['config'] = array(
     'static_thumb' => './static_thumb/',
     // 同步列表
     'sync_list' => array(
-        'sync_1' => 'http://filesync.shuai.com/server_1/sync.php',
+    //  'sync_1' => 'http://localhost/server_1/sync.php',
     ),
     // 允许的图片尺寸和别名
     'src_size' => 'src',
